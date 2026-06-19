@@ -1,0 +1,469 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GL Analisador de Ritmo e Espectrograma</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+    <style>
+        :root {
+            --primary-bg: #121212;
+            --surface-bg: #1e1e1e;
+            --text-main: #f5f5f5;
+            --accent-green: #BCDFB9;
+            --accent-rose: #C87F8B;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--primary-bg);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--accent-green);
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin-bottom: 5px;
+        }
+
+        p.subtitle { color: #aaa; font-size: 0.9rem; }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            flex: 1;
+        }
+
+        @media (min-width: 768px) {
+            .container { grid-template-columns: 3fr 1fr; }
+        }
+
+        .visualizer-panel {
+            background: var(--surface-bg);
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border: 1px solid #333;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .canvas-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: var(--accent-rose);
+            font-size: 0.8rem;
+            font-weight: bold;
+            background: rgba(0,0,0,0.6);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .metrics-panel {
+            background: var(--surface-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .metric-box {
+            background: rgba(255,255,255,0.03);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid var(--accent-green);
+        }
+
+        .metric-box.rose { border-left-color: var(--accent-rose); }
+
+        .metric-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .metric-sub {
+            font-size: 0.85rem;
+            color: var(--accent-green);
+            margin-top: 5px;
+        }
+
+        button.start-btn {
+            background: var(--accent-rose);
+            color: var(--primary-bg);
+            border: none;
+            padding: 15px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.1s;
+            margin: 0 auto 20px auto;
+            display: block;
+            max-width: 300px;
+            width: 100%;
+        }
+
+        button.start-btn:active { transform: scale(0.98); }
+        button.start-btn:hover { opacity: 0.9; }
+
+        .status-dot {
+            height: 15px;
+            width: 15px;
+            background-color: #555;
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        .status-dot.active { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>GL Analisador de Ritmo</h1>
+        <p class="subtitle">Análise de Espectrograma e Detecção de Andamento em Tempo Real</p>
+    </header>
+
+    <button class="start-btn" id="startBtn">Iniciar Captura de Áudio</button>
+
+    <div class="container">
+        <div class="visualizer-panel">
+            <div class="canvas-container">
+                <span class="canvas-label">Espectrograma (Frequência)</span>
+                <canvas id="spectrogramCanvas"></canvas>
+            </div>
+            <div class="canvas-container">
+                <span class="canvas-label">Forma de Onda & Transientes</span>
+                <canvas id="waveformCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="metrics-panel">
+            <div class="metric-box">
+                <div class="metric-title">BPM Exato (Últimas 4 Batidas)</div>
+                <div class="metric-value" id="bpmExact">--</div>
+                <div class="metric-sub" id="notesExact">-- colcheias / -- semínimas</div>
+            </div>
+
+            <div class="metric-box rose">
+                <div class="metric-title">BPM Médio (Últimas 16 Batidas)</div>
+                <div class="metric-value" id="bpmAvg">--</div>
+                <div class="metric-sub" id="notesAvg">-- colcheias / -- semínimas</div>
+            </div>
+
+            <div class="metric-box">
+                <div class="metric-title">Feel / Levada</div>
+                <div class="metric-value" id="feelType" style="color: var(--accent-rose);">Aguardando...</div>
+            </div>
+
+            <div style="text-align: center; margin-top: auto;">
+                <span style="font-size: 0.9rem; color: #888;">Batida Detectada:</span>
+                <span class="status-dot" id="beatIndicator"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const spectrogramCanvas = document.getElementById('spectrogramCanvas');
+        const waveformCanvas = document.getElementById('waveformCanvas');
+        const specCtx = spectrogramCanvas.getContext('2d');
+        const waveCtx = waveformCanvas.getContext('2d');
+
+        // UI Elements
+        const bpmExactEl = document.getElementById('bpmExact');
+        const notesExactEl = document.getElementById('notesExact');
+        const bpmAvgEl = document.getElementById('bpmAvg');
+        const notesAvgEl = document.getElementById('notesAvg');
+        const feelTypeEl = document.getElementById('feelType');
+        const beatIndicator = document.getElementById('beatIndicator');
+
+        // Audio Variables
+        let audioContext;
+        let analyser;
+        let microphone;
+        let dataArrayFreq;
+        let dataArrayTime;
+        let isRunning = false;
+
+        // Rhythm Analysis Variables
+        let energyHistory = [];
+        let peakTimestamps = [];
+        let intervals = [];
+        let lastPeakTime = 0;
+        let beatCount = 0;
+        
+        // Configurações do detector de transiente
+        const ENERGY_THRESHOLD_MULTIPLIER = 1.6; 
+        const MIN_TIME_BETWEEN_PEAKS = 0.2; // 200ms -> max ~300 BPM
+
+        // Colors
+        const COLOR_GREEN = '#BCDFB9';
+        const COLOR_ROSE = '#C87F8B';
+
+        function resizeCanvases() {
+            const width = spectrogramCanvas.parentElement.clientWidth;
+            const height = spectrogramCanvas.parentElement.clientHeight;
+            spectrogramCanvas.width = width;
+            spectrogramCanvas.height = height;
+            waveformCanvas.width = width;
+            waveformCanvas.height = height;
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        async function initAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                
+                microphone = audioContext.createMediaStreamSource(stream);
+                analyser = audioContext.createAnalyser();
+                
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.5;
+                microphone.connect(analyser);
+
+                dataArrayFreq = new Uint8Array(analyser.frequencyBinCount);
+                dataArrayTime = new Float32Array(analyser.fftSize);
+
+                resizeCanvases();
+                isRunning = true;
+                startBtn.style.display = 'none';
+                
+                draw();
+            } catch (err) {
+                alert('Erro ao acessar o microfone. Verifique as permissões.');
+                console.error(err);
+            }
+        }
+
+        startBtn.addEventListener('click', initAudio);
+
+        function detectTransient(timeData, currentTime) {
+            // Calcular energia Root Mean Square (RMS) do frame atual
+            let sumSq = 0;
+            for (let i = 0; i < timeData.length; i++) {
+                sumSq += timeData[i] * timeData[i];
+            }
+            let rms = Math.sqrt(sumSq / timeData.length);
+            
+            energyHistory.push(rms);
+            if (energyHistory.length > 43) { 
+                energyHistory.shift(); 
+            }
+
+            // Calcular a média de energia local
+            let avgEnergy = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+
+            // Detectar pico transiente
+            let isPeak = false;
+            if (rms > avgEnergy * ENERGY_THRESHOLD_MULTIPLIER && rms > 0.02) {
+                if (currentTime - lastPeakTime > MIN_TIME_BETWEEN_PEAKS) {
+                    isPeak = true;
+                    lastPeakTime = currentTime;
+                    registerBeat(currentTime);
+                }
+            }
+            return isPeak;
+        }
+
+        function registerBeat(time) {
+            peakTimestamps.push(time);
+            beatCount++;
+            
+            if (peakTimestamps.length > 17) {
+                peakTimestamps.shift(); // Mantém os últimos 17 timestamps para ter 16 intervalos
+            }
+
+            // Calcular intervalos (deltas)
+            intervals = [];
+            for (let i = 1; i < peakTimestamps.length; i++) {
+                intervals.push(peakTimestamps[i] - peakTimestamps[i-1]);
+            }
+
+            flashIndicator();
+            
+            // Atualiza o andamento exato (4 batidas) apenas a cada 4 batidas
+            if (beatCount % 4 === 0) {
+                updateExactTempo();
+            }
+            
+            // Atualiza a média de 16 batidas
+            updateAverageTempo();
+            
+            // Analisa Swing vs Straight
+            analyzeFeel();
+        }
+
+        function updateExactTempo() {
+            if (intervals.length >= 4) {
+                const last4 = intervals.slice(-4);
+                const avgInterval = last4.reduce((a, b) => a + b, 0) / 4;
+                const bpm = Math.round(60 / avgInterval);
+                bpmExactEl.innerText = bpm;
+                notesExactEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+            }
+        }
+
+        function updateAverageTempo() {
+            if (intervals.length >= 8) { // Mostrar média a partir de 8, calculando até 16
+                const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+                const bpm = Math.round(60 / avgInterval);
+                bpmAvgEl.innerText = bpm;
+                notesAvgEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+            }
+        }
+
+        function analyzeFeel() {
+            if (intervals.length < 6) return;
+            
+            // Compara proporções de intervalos adjacentes para detectar swing (padrão longo-curto)
+            let isSwingPattern = 0;
+            let checks = 0;
+            
+            for (let i = 1; i < intervals.length; i++) {
+                let ratio = intervals[i] / intervals[i-1];
+                // Swing de tercina clássico seria um intervalo ~2x o tamanho do outro (ratio ~2.0 ou ~0.5)
+                if ((ratio > 1.4 && ratio < 2.5) || (ratio > 0.4 && ratio < 0.7)) {
+                    isSwingPattern++;
+                }
+                checks++;
+            }
+
+            if (isSwingPattern / checks > 0.4) {
+                feelTypeEl.innerText = "SWING";
+                feelTypeEl.style.color = COLOR_ROSE;
+            } else {
+                feelTypeEl.innerText = "STRAIGHT";
+                feelTypeEl.style.color = COLOR_GREEN;
+            }
+        }
+
+        function flashIndicator() {
+            beatIndicator.classList.add('active');
+            setTimeout(() => {
+                beatIndicator.classList.remove('active');
+            }, 100);
+        }
+
+        let spectrogramOffset = 0;
+
+        function draw() {
+            if (!isRunning) return;
+            requestAnimationFrame(draw);
+
+            const currentTime = audioContext.currentTime;
+
+            analyser.getByteFrequencyData(dataArrayFreq);
+            analyser.getFloatTimeDomainData(dataArrayTime);
+
+            let isPeak = detectTransient(dataArrayTime, currentTime);
+
+            // 1. Desenhar Espectrograma (Efeito de rolagem estilo cascata)
+            const specWidth = spectrogramCanvas.width;
+            const specHeight = spectrogramCanvas.height;
+            
+            // Desloca o canvas do espectrograma para a esquerda
+            let imgData = specCtx.getImageData(1, 0, specWidth - 1, specHeight);
+            specCtx.putImageData(imgData, 0, 0);
+
+            // Desenha a nova linha na borda direita
+            for (let i = 0; i < analyser.frequencyBinCount; i++) {
+                let value = dataArrayFreq[i];
+                let percent = value / 255;
+                let height = specHeight * percent;
+                let offset = specHeight - height - 1;
+                let barWidth = 1;
+                let color = `rgb(${value}, ${value * 0.8}, ${value * 0.5})`;
+                
+                if(value === 0) color = '#000';
+                specCtx.fillStyle = color;
+                specCtx.fillRect(specWidth - 1, specHeight - i * (specHeight/analyser.frequencyBinCount), 1, (specHeight/analyser.frequencyBinCount));
+            }
+
+            // 2. Desenhar Forma de Onda
+            waveCtx.fillStyle = '#000';
+            waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+            
+            waveCtx.lineWidth = 2;
+            waveCtx.strokeStyle = COLOR_GREEN;
+            waveCtx.beginPath();
+
+            const sliceWidth = waveformCanvas.width * 1.0 / analyser.fftSize;
+            let x = 0;
+
+            for (let i = 0; i < analyser.fftSize; i++) {
+                const v = dataArrayTime[i] * 200.0;
+                const y = (waveformCanvas.height / 2) + v;
+
+                if (i === 0) waveCtx.moveTo(x, y);
+                else waveCtx.lineTo(x, y);
+
+                x += sliceWidth;
+            }
+            waveCtx.stroke();
+
+            // Flash visual na forma de onda quando detecta transiente
+            if (isPeak) {
+                waveCtx.fillStyle = 'rgba(200, 127, 139, 0.4)'; // COLOR_ROSE com transparência
+                waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+                
+                // Marca temporal vertical
+                waveCtx.beginPath();
+                waveCtx.moveTo(waveformCanvas.width/2, 0);
+                waveCtx.lineTo(waveformCanvas.width/2, waveformCanvas.height);
+                waveCtx.strokeStyle = COLOR_ROSE;
+                waveCtx.lineWidth = 4;
+                waveCtx.stroke();
+            }
+        }
+    </script>
+</body>
+</html>
