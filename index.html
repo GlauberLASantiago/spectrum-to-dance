@@ -53,6 +53,69 @@
             .container { grid-template-columns: 3fr 1fr; }
         }
 
+        /* Controles */
+        .controls-panel {
+            background: var(--surface-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333;
+            max-width: 1200px;
+            margin: 0 auto 20px auto;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]:focus { outline: none; }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #333;
+            border-radius: 3px;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: var(--accent-rose);
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -6px;
+            transition: transform 0.1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
         .visualizer-panel {
             background: var(--surface-bg);
             border-radius: 12px;
@@ -117,8 +180,6 @@
             font-size: 1.1rem; font-weight: bold;
             border-radius: 8px; cursor: pointer;
             transition: opacity 0.2s, transform 0.1s;
-            margin: 0 auto 20px auto; display: block;
-            max-width: 300px; width: 100%;
         }
 
         button.start-btn:active { transform: scale(0.98); }
@@ -141,10 +202,20 @@
 
     <header>
         <h1>GL Analisador de Ritmo</h1>
-        <p class="subtitle">AGC + Filtro Passa-Baixa para Detecção de Pulso Fixo</p>
+        <p class="subtitle">AGC + Filtro Passa-Baixa + Controle de Sensibilidade</p>
     </header>
 
-    <button class="start-btn" id="startBtn">Iniciar Captura de Áudio</button>
+    <div class="controls-panel">
+        <button class="start-btn" id="startBtn">Iniciar Captura</button>
+        
+        <div class="slider-container" id="faderContainer" style="display: none;">
+            <div class="slider-header">
+                <span>Sensibilidade</span>
+                <span id="sensLabel">50%</span>
+            </div>
+            <input type="range" id="sensitivitySlider" min="1" max="100" value="50">
+        </div>
+    </div>
 
     <div class="container">
         <div class="visualizer-panel">
@@ -179,19 +250,23 @@
             <div style="text-align: center; margin-top: auto;">
                 <span style="font-size: 0.9rem; color: #888;">Batida:</span>
                 <span class="status-dot" id="beatIndicator"></span>
-                <div class="debug-info" id="agcStatus">AGC Ativo | LP Filter 150Hz</div>
+                <div class="debug-info">AGC Ativo | LP Filter 150Hz</div>
             </div>
         </div>
     </div>
 
     <script>
         const startBtn = document.getElementById('startBtn');
+        const faderContainer = document.getElementById('faderContainer');
+        const sensitivitySlider = document.getElementById('sensitivitySlider');
+        const sensLabel = document.getElementById('sensLabel');
+        
         const spectrogramCanvas = document.getElementById('spectrogramCanvas');
         const waveformCanvas = document.getElementById('waveformCanvas');
         const specCtx = spectrogramCanvas.getContext('2d');
         const waveCtx = waveformCanvas.getContext('2d');
 
-        // UI
+        // UI Elements
         const bpmExactEl = document.getElementById('bpmExact');
         const notesExactEl = document.getElementById('notesExact');
         const bpmAvgEl = document.getElementById('bpmAvg');
@@ -201,15 +276,10 @@
 
         // Web Audio API
         let audioContext;
-        let masterAnalyser; // Para o visual
-        let beatAnalyser;   // Para detecção de BPM
-        let microphone;
-        let compressor;     // AGC
-        let lowpassFilter;  // Isolar bumbo/baixo
+        let masterAnalyser, beatAnalyser;
+        let microphone, compressor, lowpassFilter;
         
-        let dataArrayFreq;
-        let dataArrayTimeMaster;
-        let dataArrayTimeBeat;
+        let dataArrayFreq, dataArrayTimeMaster, dataArrayTimeBeat;
         let isRunning = false;
 
         // Lógica de Ritmo
@@ -219,9 +289,14 @@
         let lastPeakTime = 0;
         let beatCount = 0;
         
-        // Cores da marca
+        // Cores
         const COLOR_GREEN = '#BCDFB9';
         const COLOR_ROSE = '#C87F8B';
+
+        // Atualiza a label do slider
+        sensitivitySlider.addEventListener('input', (e) => {
+            sensLabel.innerText = e.target.value + '%';
+        });
 
         function resizeCanvases() {
             const width = spectrogramCanvas.parentElement.clientWidth;
@@ -238,7 +313,6 @@
                 
                 microphone = audioContext.createMediaStreamSource(stream);
                 
-                // 1. Compressor (Automatic Gain Control)
                 compressor = audioContext.createDynamicsCompressor();
                 compressor.threshold.value = -30;
                 compressor.knee.value = 10;
@@ -246,29 +320,22 @@
                 compressor.attack.value = 0;
                 compressor.release.value = 0.25;
 
-                // 2. Analisador Master (Visuais Completos)
                 masterAnalyser = audioContext.createAnalyser();
                 masterAnalyser.fftSize = 2048;
                 masterAnalyser.smoothingTimeConstant = 0.5;
 
-                // 3. Filtro Passa-Baixa (Isolar graves para baterias)
                 lowpassFilter = audioContext.createBiquadFilter();
                 lowpassFilter.type = 'lowpass';
-                lowpassFilter.frequency.value = 150; // Corta acima de 150Hz
+                lowpassFilter.frequency.value = 150; 
                 lowpassFilter.Q.value = 1;
 
-                // 4. Analisador de Batida (Ouve apenas os graves)
                 beatAnalyser = audioContext.createAnalyser();
                 beatAnalyser.fftSize = 1024;
                 beatAnalyser.smoothingTimeConstant = 0.2;
 
-                // Roteamento
+                // Conexões
                 microphone.connect(compressor);
-                
-                // Rota Visual
                 compressor.connect(masterAnalyser);
-                
-                // Rota de Análise de Ritmo
                 compressor.connect(lowpassFilter);
                 lowpassFilter.connect(beatAnalyser);
 
@@ -278,7 +345,10 @@
 
                 resizeCanvases();
                 isRunning = true;
+                
+                // Atualiza UI
                 startBtn.style.display = 'none';
+                faderContainer.style.display = 'flex';
                 
                 draw();
             } catch (err) {
@@ -297,16 +367,25 @@
             energyHistory.push(rms);
             if (energyHistory.length > 60) energyHistory.shift();
 
-            // Calcula média e variância para limiar adaptativo dinâmico
             let avgEnergy = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
             let variance = energyHistory.reduce((a, b) => a + Math.pow(b - avgEnergy, 2), 0) / energyHistory.length;
             let stdDev = Math.sqrt(variance);
 
-            let dynamicThreshold = avgEnergy + (stdDev * 1.5); // Limiar inteligente
-            let minTimeBetweenBeats = 0.25; // max ~240 BPM
+            // Mapeia o slider (1 a 100) para um multiplicador de Desvio Padrão
+            // 1% = Multiplicador 3.0 (Menos sensível, precisa de um pico enorme)
+            // 100% = Multiplicador 0.5 (Muito sensível, aciona com qualquer pico pequeno)
+            let sensValue = parseInt(sensitivitySlider.value);
+            let multiplier = 3.0 - ((sensValue - 1) / 99) * 2.5; 
+            
+            let dynamicThreshold = avgEnergy + (stdDev * multiplier); 
+            
+            // Também ajustamos levemente o piso mínimo com base na sensibilidade
+            let absoluteMinFloor = 0.02 - ((sensValue / 100) * 0.01); // Entre 0.01 e 0.02
+
+            let minTimeBetweenBeats = 0.25; 
 
             let isPeak = false;
-            if (rms > dynamicThreshold && rms > 0.015) {
+            if (rms > dynamicThreshold && rms > absoluteMinFloor) {
                 if (currentTime - lastPeakTime > minTimeBetweenBeats) {
                     isPeak = true;
                     lastPeakTime = currentTime;
@@ -316,14 +395,10 @@
             return isPeak;
         }
 
-        // Função para remover discrepâncias (falsos positivos/outliers)
         function getFilteredIntervals(intervalsArray) {
             if (intervalsArray.length < 3) return intervalsArray;
-            // Ordena para achar a mediana
             let sorted = [...intervalsArray].sort((a, b) => a - b);
             let median = sorted[Math.floor(sorted.length / 2)];
-            
-            // Aceita apenas intervalos que estejam até 20% longe da mediana (rejeita os "perdidos")
             return intervalsArray.filter(i => Math.abs(i - median) < (median * 0.20));
         }
 
@@ -353,7 +428,7 @@
                 if(filtered.length > 0) {
                     const avgInterval = filtered.reduce((a, b) => a + b, 0) / filtered.length;
                     const bpm = Math.round(60 / avgInterval);
-                    if(bpm > 40 && bpm < 250) { // Trava de segurança para limites reais
+                    if(bpm > 40 && bpm < 250) {
                         bpmExactEl.innerText = bpm;
                         notesExactEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
                     }
@@ -363,7 +438,7 @@
 
         function updateAverageTempo() {
             if (rawIntervals.length >= 8) {
-                const filtered = getFilteredIntervals(rawIntervals.slice(-16)); // Analisa até os últimos 16
+                const filtered = getFilteredIntervals(rawIntervals.slice(-16)); 
                 
                 if(filtered.length > 0) {
                     const avgInterval = filtered.reduce((a, b) => a + b, 0) / filtered.length;
@@ -409,17 +484,12 @@
 
             const currentTime = audioContext.currentTime;
 
-            // Coleta dados Visuais
             masterAnalyser.getByteFrequencyData(dataArrayFreq);
             masterAnalyser.getFloatTimeDomainData(dataArrayTimeMaster);
-            
-            // Coleta dados de Ritmo (Gravados/Filtrados)
             beatAnalyser.getFloatTimeDomainData(dataArrayTimeBeat);
 
-            // Detecção roda apenas nos dados filtrados (bumbo/baixo)
             let isPeak = detectTransient(dataArrayTimeBeat, currentTime);
 
-            // 1. Espectrograma em cascata
             const specWidth = spectrogramCanvas.width;
             const specHeight = spectrogramCanvas.height;
             let imgData = specCtx.getImageData(1, 0, specWidth - 1, specHeight);
@@ -433,7 +503,6 @@
                 specCtx.fillRect(specWidth - 1, specHeight - i * (specHeight/masterAnalyser.frequencyBinCount), 1, (specHeight/masterAnalyser.frequencyBinCount));
             }
 
-            // 2. Forma de Onda
             waveCtx.fillStyle = '#000';
             waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
             waveCtx.lineWidth = 2;
@@ -452,9 +521,8 @@
             }
             waveCtx.stroke();
 
-            // Feedback Visual de Batida na Forma de Onda
             if (isPeak) {
-                waveCtx.fillStyle = 'rgba(200, 127, 139, 0.2)'; // Fundo leve COLOR_ROSE
+                waveCtx.fillStyle = 'rgba(200, 127, 139, 0.2)'; 
                 waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
                 
                 waveCtx.beginPath();
