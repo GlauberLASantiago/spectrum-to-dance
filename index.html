@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GL Analisador de Ritmo e Espectrograma</title>
+    <title>GL Analisador de Ritmo Avançado</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
     <style>
         :root {
@@ -28,11 +27,8 @@
             padding: 20px;
         }
 
-        header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
+        header { text-align: center; margin-bottom: 20px; }
+        
         h1 {
             color: var(--accent-green);
             font-size: 2rem;
@@ -40,7 +36,7 @@
             letter-spacing: -0.5px;
             margin-bottom: 5px;
         }
-
+        
         p.subtitle { color: #aaa; font-size: 0.9rem; }
 
         .container {
@@ -76,22 +72,15 @@
             overflow: hidden;
         }
 
-        canvas {
-            display: block;
-            width: 100%;
-            height: 100%;
-        }
+        canvas { display: block; width: 100%; height: 100%; }
 
         .canvas-label {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: 10px; left: 10px;
             color: var(--accent-rose);
-            font-size: 0.8rem;
-            font-weight: bold;
+            font-size: 0.8rem; font-weight: bold;
             background: rgba(0,0,0,0.6);
-            padding: 2px 8px;
-            border-radius: 4px;
+            padding: 2px 8px; border-radius: 4px;
         }
 
         .metrics-panel {
@@ -106,8 +95,7 @@
 
         .metric-box {
             background: rgba(255,255,255,0.03);
-            padding: 15px;
-            border-radius: 8px;
+            padding: 15px; border-radius: 8px;
             text-align: center;
             border-left: 4px solid var(--accent-green);
         }
@@ -115,60 +103,45 @@
         .metric-box.rose { border-left-color: var(--accent-rose); }
 
         .metric-title {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #888;
-            margin-bottom: 8px;
+            font-size: 0.85rem; text-transform: uppercase;
+            letter-spacing: 1px; color: #888; margin-bottom: 8px;
         }
 
-        .metric-value {
-            font-size: 2rem;
-            font-weight: 800;
-            color: var(--text-main);
-        }
-
-        .metric-sub {
-            font-size: 0.85rem;
-            color: var(--accent-green);
-            margin-top: 5px;
-        }
+        .metric-value { font-size: 2rem; font-weight: 800; color: var(--text-main); }
+        .metric-sub { font-size: 0.85rem; color: var(--accent-green); margin-top: 5px; }
 
         button.start-btn {
             background: var(--accent-rose);
             color: var(--primary-bg);
-            border: none;
-            padding: 15px 30px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            border-radius: 8px;
-            cursor: pointer;
+            border: none; padding: 15px 30px;
+            font-size: 1.1rem; font-weight: bold;
+            border-radius: 8px; cursor: pointer;
             transition: opacity 0.2s, transform 0.1s;
-            margin: 0 auto 20px auto;
-            display: block;
-            max-width: 300px;
-            width: 100%;
+            margin: 0 auto 20px auto; display: block;
+            max-width: 300px; width: 100%;
         }
 
         button.start-btn:active { transform: scale(0.98); }
         button.start-btn:hover { opacity: 0.9; }
 
         .status-dot {
-            height: 15px;
-            width: 15px;
-            background-color: #555;
-            border-radius: 50%;
-            display: inline-block;
-            margin-left: 10px;
+            height: 15px; width: 15px;
+            background-color: #555; border-radius: 50%;
+            display: inline-block; margin-left: 10px;
         }
         .status-dot.active { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
+        
+        .debug-info {
+            font-size: 0.7rem; color: #666;
+            text-align: center; margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
     <header>
         <h1>GL Analisador de Ritmo</h1>
-        <p class="subtitle">Análise de Espectrograma e Detecção de Andamento em Tempo Real</p>
+        <p class="subtitle">AGC + Filtro Passa-Baixa para Detecção de Pulso Fixo</p>
     </header>
 
     <button class="start-btn" id="startBtn">Iniciar Captura de Áudio</button>
@@ -176,24 +149,24 @@
     <div class="container">
         <div class="visualizer-panel">
             <div class="canvas-container">
-                <span class="canvas-label">Espectrograma (Frequência)</span>
+                <span class="canvas-label">Espectrograma Completo</span>
                 <canvas id="spectrogramCanvas"></canvas>
             </div>
             <div class="canvas-container">
-                <span class="canvas-label">Forma de Onda & Transientes</span>
+                <span class="canvas-label">Forma de Onda (Picos Filtrados)</span>
                 <canvas id="waveformCanvas"></canvas>
             </div>
         </div>
 
         <div class="metrics-panel">
             <div class="metric-box">
-                <div class="metric-title">BPM Exato (Últimas 4 Batidas)</div>
+                <div class="metric-title">BPM Exato (Últimas 4)</div>
                 <div class="metric-value" id="bpmExact">--</div>
                 <div class="metric-sub" id="notesExact">-- colcheias / -- semínimas</div>
             </div>
 
             <div class="metric-box rose">
-                <div class="metric-title">BPM Médio (Últimas 16 Batidas)</div>
+                <div class="metric-title">BPM Médio (Últimas 16)</div>
                 <div class="metric-value" id="bpmAvg">--</div>
                 <div class="metric-sub" id="notesAvg">-- colcheias / -- semínimas</div>
             </div>
@@ -204,8 +177,9 @@
             </div>
 
             <div style="text-align: center; margin-top: auto;">
-                <span style="font-size: 0.9rem; color: #888;">Batida Detectada:</span>
+                <span style="font-size: 0.9rem; color: #888;">Batida:</span>
                 <span class="status-dot" id="beatIndicator"></span>
+                <div class="debug-info" id="agcStatus">AGC Ativo | LP Filter 150Hz</div>
             </div>
         </div>
     </div>
@@ -217,7 +191,7 @@
         const specCtx = spectrogramCanvas.getContext('2d');
         const waveCtx = waveformCanvas.getContext('2d');
 
-        // UI Elements
+        // UI
         const bpmExactEl = document.getElementById('bpmExact');
         const notesExactEl = document.getElementById('notesExact');
         const bpmAvgEl = document.getElementById('bpmAvg');
@@ -225,53 +199,82 @@
         const feelTypeEl = document.getElementById('feelType');
         const beatIndicator = document.getElementById('beatIndicator');
 
-        // Audio Variables
+        // Web Audio API
         let audioContext;
-        let analyser;
+        let masterAnalyser; // Para o visual
+        let beatAnalyser;   // Para detecção de BPM
         let microphone;
+        let compressor;     // AGC
+        let lowpassFilter;  // Isolar bumbo/baixo
+        
         let dataArrayFreq;
-        let dataArrayTime;
+        let dataArrayTimeMaster;
+        let dataArrayTimeBeat;
         let isRunning = false;
 
-        // Rhythm Analysis Variables
+        // Lógica de Ritmo
         let energyHistory = [];
         let peakTimestamps = [];
-        let intervals = [];
+        let rawIntervals = [];
         let lastPeakTime = 0;
         let beatCount = 0;
         
-        // Configurações do detector de transiente
-        const ENERGY_THRESHOLD_MULTIPLIER = 1.6; 
-        const MIN_TIME_BETWEEN_PEAKS = 0.2; // 200ms -> max ~300 BPM
-
-        // Colors
+        // Cores da marca
         const COLOR_GREEN = '#BCDFB9';
         const COLOR_ROSE = '#C87F8B';
 
         function resizeCanvases() {
             const width = spectrogramCanvas.parentElement.clientWidth;
             const height = spectrogramCanvas.parentElement.clientHeight;
-            spectrogramCanvas.width = width;
-            spectrogramCanvas.height = height;
-            waveformCanvas.width = width;
-            waveformCanvas.height = height;
+            spectrogramCanvas.width = width; spectrogramCanvas.height = height;
+            waveformCanvas.width = width; waveformCanvas.height = height;
         }
         window.addEventListener('resize', resizeCanvases);
 
         async function initAudio() {
             try {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 
                 microphone = audioContext.createMediaStreamSource(stream);
-                analyser = audioContext.createAnalyser();
                 
-                analyser.fftSize = 2048;
-                analyser.smoothingTimeConstant = 0.5;
-                microphone.connect(analyser);
+                // 1. Compressor (Automatic Gain Control)
+                compressor = audioContext.createDynamicsCompressor();
+                compressor.threshold.value = -30;
+                compressor.knee.value = 10;
+                compressor.ratio.value = 12;
+                compressor.attack.value = 0;
+                compressor.release.value = 0.25;
 
-                dataArrayFreq = new Uint8Array(analyser.frequencyBinCount);
-                dataArrayTime = new Float32Array(analyser.fftSize);
+                // 2. Analisador Master (Visuais Completos)
+                masterAnalyser = audioContext.createAnalyser();
+                masterAnalyser.fftSize = 2048;
+                masterAnalyser.smoothingTimeConstant = 0.5;
+
+                // 3. Filtro Passa-Baixa (Isolar graves para baterias)
+                lowpassFilter = audioContext.createBiquadFilter();
+                lowpassFilter.type = 'lowpass';
+                lowpassFilter.frequency.value = 150; // Corta acima de 150Hz
+                lowpassFilter.Q.value = 1;
+
+                // 4. Analisador de Batida (Ouve apenas os graves)
+                beatAnalyser = audioContext.createAnalyser();
+                beatAnalyser.fftSize = 1024;
+                beatAnalyser.smoothingTimeConstant = 0.2;
+
+                // Roteamento
+                microphone.connect(compressor);
+                
+                // Rota Visual
+                compressor.connect(masterAnalyser);
+                
+                // Rota de Análise de Ritmo
+                compressor.connect(lowpassFilter);
+                lowpassFilter.connect(beatAnalyser);
+
+                dataArrayFreq = new Uint8Array(masterAnalyser.frequencyBinCount);
+                dataArrayTimeMaster = new Float32Array(masterAnalyser.fftSize);
+                dataArrayTimeBeat = new Float32Array(beatAnalyser.fftSize);
 
                 resizeCanvases();
                 isRunning = true;
@@ -279,7 +282,7 @@
                 
                 draw();
             } catch (err) {
-                alert('Erro ao acessar o microfone. Verifique as permissões.');
+                alert('Erro ao acessar o microfone.');
                 console.error(err);
             }
         }
@@ -287,25 +290,24 @@
         startBtn.addEventListener('click', initAudio);
 
         function detectTransient(timeData, currentTime) {
-            // Calcular energia Root Mean Square (RMS) do frame atual
             let sumSq = 0;
-            for (let i = 0; i < timeData.length; i++) {
-                sumSq += timeData[i] * timeData[i];
-            }
+            for (let i = 0; i < timeData.length; i++) { sumSq += timeData[i] * timeData[i]; }
             let rms = Math.sqrt(sumSq / timeData.length);
             
             energyHistory.push(rms);
-            if (energyHistory.length > 43) { 
-                energyHistory.shift(); 
-            }
+            if (energyHistory.length > 60) energyHistory.shift();
 
-            // Calcular a média de energia local
+            // Calcula média e variância para limiar adaptativo dinâmico
             let avgEnergy = energyHistory.reduce((a, b) => a + b, 0) / energyHistory.length;
+            let variance = energyHistory.reduce((a, b) => a + Math.pow(b - avgEnergy, 2), 0) / energyHistory.length;
+            let stdDev = Math.sqrt(variance);
 
-            // Detectar pico transiente
+            let dynamicThreshold = avgEnergy + (stdDev * 1.5); // Limiar inteligente
+            let minTimeBetweenBeats = 0.25; // max ~240 BPM
+
             let isPeak = false;
-            if (rms > avgEnergy * ENERGY_THRESHOLD_MULTIPLIER && rms > 0.02) {
-                if (currentTime - lastPeakTime > MIN_TIME_BETWEEN_PEAKS) {
+            if (rms > dynamicThreshold && rms > 0.015) {
+                if (currentTime - lastPeakTime > minTimeBetweenBeats) {
                     isPeak = true;
                     lastPeakTime = currentTime;
                     registerBeat(currentTime);
@@ -314,71 +316,81 @@
             return isPeak;
         }
 
+        // Função para remover discrepâncias (falsos positivos/outliers)
+        function getFilteredIntervals(intervalsArray) {
+            if (intervalsArray.length < 3) return intervalsArray;
+            // Ordena para achar a mediana
+            let sorted = [...intervalsArray].sort((a, b) => a - b);
+            let median = sorted[Math.floor(sorted.length / 2)];
+            
+            // Aceita apenas intervalos que estejam até 20% longe da mediana (rejeita os "perdidos")
+            return intervalsArray.filter(i => Math.abs(i - median) < (median * 0.20));
+        }
+
         function registerBeat(time) {
             peakTimestamps.push(time);
             beatCount++;
             
-            if (peakTimestamps.length > 17) {
-                peakTimestamps.shift(); // Mantém os últimos 17 timestamps para ter 16 intervalos
-            }
+            if (peakTimestamps.length > 20) peakTimestamps.shift(); 
 
-            // Calcular intervalos (deltas)
-            intervals = [];
+            rawIntervals = [];
             for (let i = 1; i < peakTimestamps.length; i++) {
-                intervals.push(peakTimestamps[i] - peakTimestamps[i-1]);
+                rawIntervals.push(peakTimestamps[i] - peakTimestamps[i-1]);
             }
 
             flashIndicator();
             
-            // Atualiza o andamento exato (4 batidas) apenas a cada 4 batidas
-            if (beatCount % 4 === 0) {
-                updateExactTempo();
-            }
-            
-            // Atualiza a média de 16 batidas
+            if (beatCount % 4 === 0) updateExactTempo();
             updateAverageTempo();
-            
-            // Analisa Swing vs Straight
             analyzeFeel();
         }
 
         function updateExactTempo() {
-            if (intervals.length >= 4) {
-                const last4 = intervals.slice(-4);
-                const avgInterval = last4.reduce((a, b) => a + b, 0) / 4;
-                const bpm = Math.round(60 / avgInterval);
-                bpmExactEl.innerText = bpm;
-                notesExactEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+            if (rawIntervals.length >= 4) {
+                const last4Raw = rawIntervals.slice(-4);
+                const filtered = getFilteredIntervals(last4Raw);
+                
+                if(filtered.length > 0) {
+                    const avgInterval = filtered.reduce((a, b) => a + b, 0) / filtered.length;
+                    const bpm = Math.round(60 / avgInterval);
+                    if(bpm > 40 && bpm < 250) { // Trava de segurança para limites reais
+                        bpmExactEl.innerText = bpm;
+                        notesExactEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+                    }
+                }
             }
         }
 
         function updateAverageTempo() {
-            if (intervals.length >= 8) { // Mostrar média a partir de 8, calculando até 16
-                const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-                const bpm = Math.round(60 / avgInterval);
-                bpmAvgEl.innerText = bpm;
-                notesAvgEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+            if (rawIntervals.length >= 8) {
+                const filtered = getFilteredIntervals(rawIntervals.slice(-16)); // Analisa até os últimos 16
+                
+                if(filtered.length > 0) {
+                    const avgInterval = filtered.reduce((a, b) => a + b, 0) / filtered.length;
+                    const bpm = Math.round(60 / avgInterval);
+                    if(bpm > 40 && bpm < 250) {
+                        bpmAvgEl.innerText = bpm;
+                        notesAvgEl.innerText = `${bpm * 2} colcheias / ${bpm} semínimas`;
+                    }
+                }
             }
         }
 
         function analyzeFeel() {
-            if (intervals.length < 6) return;
-            
-            // Compara proporções de intervalos adjacentes para detectar swing (padrão longo-curto)
+            if (rawIntervals.length < 6) return;
             let isSwingPattern = 0;
             let checks = 0;
             
-            for (let i = 1; i < intervals.length; i++) {
-                let ratio = intervals[i] / intervals[i-1];
-                // Swing de tercina clássico seria um intervalo ~2x o tamanho do outro (ratio ~2.0 ou ~0.5)
-                if ((ratio > 1.4 && ratio < 2.5) || (ratio > 0.4 && ratio < 0.7)) {
+            for (let i = 1; i < rawIntervals.length; i++) {
+                let ratio = rawIntervals[i] / rawIntervals[i-1];
+                if ((ratio > 1.35 && ratio < 2.5) || (ratio > 0.4 && ratio < 0.75)) {
                     isSwingPattern++;
                 }
                 checks++;
             }
 
-            if (isSwingPattern / checks > 0.4) {
-                feelTypeEl.innerText = "SWING";
+            if (isSwingPattern / checks > 0.35) {
+                feelTypeEl.innerText = "SWING / SHUFFLE";
                 feelTypeEl.style.color = COLOR_ROSE;
             } else {
                 feelTypeEl.innerText = "STRAIGHT";
@@ -388,12 +400,8 @@
 
         function flashIndicator() {
             beatIndicator.classList.add('active');
-            setTimeout(() => {
-                beatIndicator.classList.remove('active');
-            }, 100);
+            setTimeout(() => beatIndicator.classList.remove('active'), 80);
         }
-
-        let spectrogramOffset = 0;
 
         function draw() {
             if (!isRunning) return;
@@ -401,66 +409,59 @@
 
             const currentTime = audioContext.currentTime;
 
-            analyser.getByteFrequencyData(dataArrayFreq);
-            analyser.getFloatTimeDomainData(dataArrayTime);
+            // Coleta dados Visuais
+            masterAnalyser.getByteFrequencyData(dataArrayFreq);
+            masterAnalyser.getFloatTimeDomainData(dataArrayTimeMaster);
+            
+            // Coleta dados de Ritmo (Gravados/Filtrados)
+            beatAnalyser.getFloatTimeDomainData(dataArrayTimeBeat);
 
-            let isPeak = detectTransient(dataArrayTime, currentTime);
+            // Detecção roda apenas nos dados filtrados (bumbo/baixo)
+            let isPeak = detectTransient(dataArrayTimeBeat, currentTime);
 
-            // 1. Desenhar Espectrograma (Efeito de rolagem estilo cascata)
+            // 1. Espectrograma em cascata
             const specWidth = spectrogramCanvas.width;
             const specHeight = spectrogramCanvas.height;
-            
-            // Desloca o canvas do espectrograma para a esquerda
             let imgData = specCtx.getImageData(1, 0, specWidth - 1, specHeight);
             specCtx.putImageData(imgData, 0, 0);
 
-            // Desenha a nova linha na borda direita
-            for (let i = 0; i < analyser.frequencyBinCount; i++) {
+            for (let i = 0; i < masterAnalyser.frequencyBinCount; i++) {
                 let value = dataArrayFreq[i];
                 let percent = value / 255;
-                let height = specHeight * percent;
-                let offset = specHeight - height - 1;
-                let barWidth = 1;
-                let color = `rgb(${value}, ${value * 0.8}, ${value * 0.5})`;
-                
-                if(value === 0) color = '#000';
+                let color = value === 0 ? '#000' : `rgb(${value}, ${value * 0.8}, ${value * 0.5})`;
                 specCtx.fillStyle = color;
-                specCtx.fillRect(specWidth - 1, specHeight - i * (specHeight/analyser.frequencyBinCount), 1, (specHeight/analyser.frequencyBinCount));
+                specCtx.fillRect(specWidth - 1, specHeight - i * (specHeight/masterAnalyser.frequencyBinCount), 1, (specHeight/masterAnalyser.frequencyBinCount));
             }
 
-            // 2. Desenhar Forma de Onda
+            // 2. Forma de Onda
             waveCtx.fillStyle = '#000';
             waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-            
             waveCtx.lineWidth = 2;
             waveCtx.strokeStyle = COLOR_GREEN;
             waveCtx.beginPath();
 
-            const sliceWidth = waveformCanvas.width * 1.0 / analyser.fftSize;
+            const sliceWidth = waveformCanvas.width * 1.0 / masterAnalyser.fftSize;
             let x = 0;
 
-            for (let i = 0; i < analyser.fftSize; i++) {
-                const v = dataArrayTime[i] * 200.0;
+            for (let i = 0; i < masterAnalyser.fftSize; i++) {
+                const v = dataArrayTimeMaster[i] * 200.0;
                 const y = (waveformCanvas.height / 2) + v;
-
                 if (i === 0) waveCtx.moveTo(x, y);
                 else waveCtx.lineTo(x, y);
-
                 x += sliceWidth;
             }
             waveCtx.stroke();
 
-            // Flash visual na forma de onda quando detecta transiente
+            // Feedback Visual de Batida na Forma de Onda
             if (isPeak) {
-                waveCtx.fillStyle = 'rgba(200, 127, 139, 0.4)'; // COLOR_ROSE com transparência
+                waveCtx.fillStyle = 'rgba(200, 127, 139, 0.2)'; // Fundo leve COLOR_ROSE
                 waveCtx.fillRect(0, 0, waveformCanvas.width, waveformCanvas.height);
                 
-                // Marca temporal vertical
                 waveCtx.beginPath();
                 waveCtx.moveTo(waveformCanvas.width/2, 0);
                 waveCtx.lineTo(waveformCanvas.width/2, waveformCanvas.height);
                 waveCtx.strokeStyle = COLOR_ROSE;
-                waveCtx.lineWidth = 4;
+                waveCtx.lineWidth = 3;
                 waveCtx.stroke();
             }
         }
